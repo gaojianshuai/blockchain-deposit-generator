@@ -231,47 +231,33 @@ function AIAssistant({ onGenerate }: { onGenerate: (scenario: DepositScenario) =
     if (!message.trim()) return
     
     const userMsg = message
-    setChatHistory(prev => [...prev, { role: 'user', content: userMsg }])
+    const newHistory = [...chatHistory, { role: 'user', content: userMsg }]
+    setChatHistory(newHistory)
     setMessage('')
     setIsTyping(true)
     
-    // Simulate AI response
-    setTimeout(() => {
-      const response = generateResponse(userMsg)
-      setChatHistory(prev => [...prev, { role: 'assistant', content: response }])
-      setIsTyping(false)
-    }, 1500)
-  }
-
-  const generateResponse = (input: string): string => {
-    const lower = input.toLowerCase()
-    
-    if (lower.includes('以太坊') || lower.includes('eth')) {
-      if (lower.includes('合约') || lower.includes('contract')) {
-        return '好的！我为你构造以太坊合约入金场景...'
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: userMsg, 
+          history: chatHistory.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.error) {
+        setChatHistory(prev => [...prev, { role: 'assistant', content: `错误: ${data.error}` }])
+      } else {
+        setChatHistory(prev => [...prev, { role: 'assistant', content: data.reply }])
       }
-      return '好的！以太坊入金场景准备中...'
-    }
-    if (lower.includes('cosmos') || lower.includes('原子') || lower.includes('atom')) {
-      return '好的！Cosmos 假入金场景构造中...'
-    }
-    if (lower.includes('异常') || lower.includes('exception') || lower.includes('超时')) {
-      return '好的！异常场景构造中...'
-    }
-    if (lower.includes('跨链') || lower.includes('bridge')) {
-      return '好的！跨链入金场景准备中...'
-    }
-    if (lower.includes('假') || lower.includes('mock') || lower.includes('fake')) {
-      return '好的！假入金测试场景构造中...'
-    }
-    if (lower.includes('polygon') || lower.includes('matic')) {
-      return '好的！Polygon 场景构造中...'
-    }
-    if (lower.includes('base')) {
-      return '好的！Base 链场景构造中...'
+    } catch (error) {
+      setChatHistory(prev => [...prev, { role: 'assistant', content: '网络错误，请稍后重试' }])
     }
     
-    return '明白了！根据你的需求构造入金场景...'
+    setIsTyping(false)
   }
 
   const handleScenarioGenerate = (scenarioKey: string) => {
