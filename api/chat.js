@@ -1,4 +1,7 @@
 export default async function handler(req, res) {
+  console.log('=== API Called ===');
+  console.log('Method:', req.method);
+  
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -18,6 +21,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.MINIMAX_API_KEY;
+  console.log('API Key exists:', !!apiKey);
   
   if (!apiKey) {
     return res.status(500).json({ 
@@ -40,9 +44,12 @@ export default async function handler(req, res) {
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...history.map(h => ({ role: h.role, content: h.content })),
+    ...history.map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
     { role: 'user', content: message }
   ];
+
+  console.log('Calling MiniMax API...');
+  console.log('Messages count:', messages.length);
 
   try {
     const response = await fetch('https://api.minimaxi.com/anthropic/v1/messages', {
@@ -58,15 +65,33 @@ export default async function handler(req, res) {
       })
     });
 
+    console.log('Response status:', response.status);
+    
     const data = await response.json();
+    console.log('Response data:', JSON.stringify(data).substring(0, 500));
 
     if (data.error) {
-      return res.status(400).json({ error: data.error.message || 'API Error' });
+      console.log('API Error:', data.error);
+      return res.status(400).json({ error: data.error.message || JSON.stringify(data.error) });
     }
 
-    const reply = data.content?.[0]?.text || '抱歉，没有收到回复';
+    // Handle different response formats
+    let reply = '';
+    if (data.content && data.content[0] && data.content[0].text) {
+      reply = data.content[0].text;
+    } else if (data.text) {
+      reply = data.text;
+    } else if (data.message) {
+      reply = data.message;
+    } else {
+      console.log('Unexpected response format:', data);
+      reply = '收到回复，但格式异常';
+    }
+
+    console.log('Reply:', reply.substring(0, 100));
     return res.status(200).json({ reply });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Server error' });
+    console.log('Catch error:', error.message);
+    return res.status(500).json({ error: 'Server error: ' + error.message });
   }
 }
