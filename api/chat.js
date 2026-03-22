@@ -1,7 +1,4 @@
 export default async function handler(req, res) {
-  console.log('=== API Called ===');
-  console.log('Method:', req.method);
-  
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,7 +18,6 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.MINIMAX_API_KEY;
-  console.log('API Key exists:', !!apiKey);
   
   if (!apiKey) {
     return res.status(500).json({ 
@@ -48,9 +44,6 @@ export default async function handler(req, res) {
     { role: 'user', content: message }
   ];
 
-  console.log('Calling MiniMax API...');
-  console.log('Messages count:', messages.length);
-
   try {
     const response = await fetch('https://api.minimaxi.com/anthropic/v1/messages', {
       method: 'POST',
@@ -65,33 +58,35 @@ export default async function handler(req, res) {
       })
     });
 
-    console.log('Response status:', response.status);
-    
     const data = await response.json();
-    console.log('Response data:', JSON.stringify(data).substring(0, 500));
 
     if (data.error) {
-      console.log('API Error:', data.error);
       return res.status(400).json({ error: data.error.message || JSON.stringify(data.error) });
     }
 
-    // Handle different response formats
+    // MiniMax API 返回格式: { content: [{type: "text", text: "..."}] }
     let reply = '';
-    if (data.content && data.content[0] && data.content[0].text) {
-      reply = data.content[0].text;
+    
+    if (data.content && Array.isArray(data.content) && data.content.length > 0) {
+      // 找到 type 为 "text" 的内容
+      const textObj = data.content.find(c => c.type === 'text');
+      reply = textObj ? textObj.text : (data.content[0].text || '');
     } else if (data.text) {
       reply = data.text;
     } else if (data.message) {
       reply = data.message;
+    } else if (data.choices && data.choices[0] && data.choices[0].message) {
+      reply = data.choices[0].message.content || data.choices[0].message.text || '';
     } else {
-      console.log('Unexpected response format:', data);
-      reply = '收到回复，但格式异常';
+      reply = JSON.stringify(data);
     }
 
-    console.log('Reply:', reply.substring(0, 100));
+    if (!reply) {
+      return res.status(200).json({ reply: '收到回复但内容为空' });
+    }
+
     return res.status(200).json({ reply });
   } catch (error) {
-    console.log('Catch error:', error.message);
     return res.status(500).json({ error: 'Server error: ' + error.message });
   }
 }
